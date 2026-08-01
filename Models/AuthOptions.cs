@@ -1,7 +1,7 @@
 ﻿using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
-namespace CanbanBackend.Models
+namespace KanbanBackend.Models
 {
     public class AuthOptions
     {

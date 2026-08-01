@@ -1,6 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 
-namespace CanbanBackend.Models
+namespace KanbanBackend.Models
 {
     public class DatabaseContext : DbContext
     {

@@ -1,4 +1,4 @@
-﻿namespace CanbanBackend.Models
+﻿namespace KanbanBackend.Models
 {
     public class User
     {

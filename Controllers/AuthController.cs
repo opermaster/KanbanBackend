@@ -1,11 +1,12 @@
-﻿using CanbanBackend.Models;
+﻿using KanbanBackend.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 
-namespace CanbanBackend.Controllers
+namespace KanbanBackend.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
@@ -16,19 +17,24 @@ namespace CanbanBackend.Controllers
             _context = context;
         }
         [HttpPost("new_user")]
-        public ActionResult Register(UserDto _user) {
-            bool exist = _context.Users.Any(u => u.Login == _user.Login);
-            if (exist) return Conflict("User with this login already exists");
+        public async Task<ActionResult> Register(UserDto _user, CancellationToken ct) {
+
+            if (await _context.Users.AnyAsync(u => u.Login == _user.Login, ct)) 
+                return Conflict("User with this login already exists");
+
             User user = _user.ToUser();
             _context.Users.Add(user);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync(ct);
+
             return StatusCode(201, new { id = user.Id });
         }
 
         [HttpPost("login")]
-        public ActionResult Login(UserDto _user) {
-            User? user = _context.Users.FirstOrDefault(u => u.Login == _user.Login);
-            if (user is not null && !UserDto.VerifyPassword(_user.Password, user.PasswordHash) ) 
+        public async Task<ActionResult> Login(UserDto _user, CancellationToken ct) {
+
+            User? user = await _context.Users.FirstOrDefaultAsync(u => u.Login == _user.Login, ct);
+
+            if (user is null || !UserDto.VerifyPassword(_user.Password, user.PasswordHash) ) 
                 return Unauthorized("Invalid login or password");
 
             var claims = new List<Claim> {
@@ -42,8 +48,6 @@ namespace CanbanBackend.Controllers
                     expires: DateTime.UtcNow.Add(TimeSpan.FromMinutes(30)),
                     signingCredentials: new SigningCredentials(AuthOptions.GetSymmetricSecurityKey(), SecurityAlgorithms.HmacSha256));
             string token = new JwtSecurityTokenHandler().WriteToken(jwt);
-
-
 
             return Ok(new { Token = token });
 

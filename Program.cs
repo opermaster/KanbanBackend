@@ -1,14 +1,23 @@
-using CanbanBackend.Models;
+using KanbanBackend.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-namespace CanbanBackend
+namespace KanbanBackend
 {
     public class Program
     {
         public static void Main(string[] args) {
             var builder = WebApplication.CreateBuilder(args);
             var connectionString = builder.Configuration.GetConnectionString("PostgresConnection");
+            builder.Services.AddCors(options => {
+                options.AddPolicy("AllowFrontend",
+                    policy => {
+                        policy
+                            .WithOrigins("http://127.0.0.1:5173", "http://localhost:5173")
+                            .AllowAnyHeader()
+                            .AllowAnyMethod();
+                    });
+            });
             builder.Services.AddControllers();
             builder.Services.AddDbContext<DatabaseContext>(options =>
                 options.UseNpgsql(connectionString));
@@ -49,6 +58,7 @@ namespace CanbanBackend
             var app = builder.Build();
 
             app.UseRouting();
+            app.UseCors("AllowFrontend");
             app.UseAuthentication();
             app.UseAuthorization();
             app.MapControllers();
