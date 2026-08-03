@@ -17,23 +17,24 @@ namespace KanbanBackend.Controllers
             _context = context;
         }
         [HttpPost("new_user")]
-        public async Task<ActionResult> Register(UserDto _user, CancellationToken ct) {
+        public async Task<ActionResult> Register(UserDto _user) {
 
-            if (await _context.Users.AnyAsync(u => u.Login == _user.Login, ct)) 
+            if (await _context.Users.AnyAsync(u => u.Login == _user.Login)) 
                 return Conflict("User with this login already exists");
 
             User user = _user.ToUser();
             _context.Users.Add(user);
-            await _context.SaveChangesAsync(ct);
+            _context.SaveChanges();
 
             return StatusCode(201, new { id = user.Id });
         }
 
         [HttpPost("login")]
-        public async Task<ActionResult> Login(UserDto _user, CancellationToken ct) {
+        public async Task<ActionResult> Login(UserDto _user) {
+            User? user = await _context.Users.FirstOrDefaultAsync(u => u.Login == _user.Login);
 
-            User? user = await _context.Users.FirstOrDefaultAsync(u => u.Login == _user.Login, ct);
-
+            Console.WriteLine(_user.Login);
+            Console.WriteLine(_user.Password);
             if (user is null || !UserDto.VerifyPassword(_user.Password, user.PasswordHash) ) 
                 return Unauthorized("Invalid login or password");
 

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 namespace KanbanBackend.Controllers
 {
     public record DashboardCreate(string dashboard_name);
+
     [Route("api/[controller]")]
     [ApiController]
     public class DashboardsController : ControllerBase
@@ -39,10 +40,10 @@ namespace KanbanBackend.Controllers
         public async Task<ActionResult<List<DashboardDto>>> GetAllDashboards(CancellationToken ct) {
             var userId = User.GetUserId();
             if (userId is null) return Unauthorized();
-
+           
             return await _context.Dashboards
                 .AsNoTracking()
-                .Where(_db => _db.UserId == userId)
+                .Where(_db => _db.UserId == userId || _db.Members.Any(_m => _m.UserId == userId))
                 .Select(_db => new DashboardDto() { Name = _db.Name, Id = _db.Id })
                 .ToListAsync(ct); 
         }

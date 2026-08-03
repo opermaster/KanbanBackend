@@ -1,3 +1,4 @@
+using KanbanBackend.Controllers;
 using KanbanBackend.Models;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -9,13 +10,15 @@ namespace KanbanBackend
         public static void Main(string[] args) {
             var builder = WebApplication.CreateBuilder(args);
             var connectionString = builder.Configuration.GetConnectionString("PostgresConnection");
+            builder.Services.AddSignalR();
             builder.Services.AddCors(options => {
                 options.AddPolicy("AllowFrontend",
                     policy => {
                         policy
                             .WithOrigins("http://127.0.0.1:5173", "http://localhost:5173")
                             .AllowAnyHeader()
-                            .AllowAnyMethod();
+                            .AllowAnyMethod()
+                            .AllowCredentials();
                     });
             });
             builder.Services.AddControllers();
@@ -54,6 +57,16 @@ namespace KanbanBackend
                         return Task.CompletedTask;
                     }
                 };
+                options.Events = new JwtBearerEvents {
+                    OnMessageReceived = context => {
+                        var accessToken = context.Request.Query["access_token"];
+                        if (!string.IsNullOrEmpty(accessToken) &&
+                            context.HttpContext.Request.Path.StartsWithSegments("/boardhub")) {
+                            context.Token = accessToken;
+                        }
+                        return Task.CompletedTask;
+                    }
+                };
             });
             var app = builder.Build();
 
@@ -62,7 +75,7 @@ namespace KanbanBackend
             app.UseAuthentication();
             app.UseAuthorization();
             app.MapControllers();
-
+            app.MapHub<BoardHub>("/boardhub");
             app.Run();
         }
     }

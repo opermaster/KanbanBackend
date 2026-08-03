@@ -7,6 +7,9 @@
 
         public int UserId { get; set; }
         public User User{ get; set; } = null!;
+
+        public ICollection<BoardMember> Members { get; set; } = new List<BoardMember>();
+        public ICollection<BoardInvite> Invites { get; set; } = new List<BoardInvite>();
     }
     public class DashboardDto
     {
