@@ -10,7 +10,11 @@ namespace KanbanBackend
         public static void Main(string[] args) {
             var builder = WebApplication.CreateBuilder(args);
             var connectionString = builder.Configuration.GetConnectionString("PostgresConnection");
-            builder.Services.AddSignalR();
+            builder.Services.AddSignalR(options =>{
+                options.EnableDetailedErrors = true;
+                }).AddJsonProtocol(options =>{
+                    options.PayloadSerializerOptions.PropertyNameCaseInsensitive = true;
+                });
             builder.Services.AddCors(options => {
                 options.AddPolicy("AllowFrontend",
                     policy => {

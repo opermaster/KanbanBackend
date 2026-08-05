@@ -6,6 +6,9 @@ using System.Text.RegularExpressions;
 
 namespace KanbanBackend.Controllers
 {
+    public record CardDto(int Id, string Name, int Order, bool Done);
+    public record ColumnDto(int Id, string Name, int Order, List<CardDto> Cards);
+
     [Authorize]
     public class BoardHub : Hub
     {
@@ -15,6 +18,22 @@ namespace KanbanBackend.Controllers
             _context = context;
         }
 
+        private async Task<List<ColumnDto>> LoadBoardState(int dashboardId) {
+            return await _context.Columns
+                .AsNoTracking()
+                .Where(c => c.DashboardId == dashboardId)
+                .OrderBy(c => c.Order)
+                .Select(c => new ColumnDto(
+                    c.Id,
+                    c.Name,
+                    c.Order,
+                    c.Cards
+                        .OrderBy(card => card.Order)
+                        .Select(card => new CardDto(card.Id, card.Name, card.Order, card.Done))
+                        .ToList()
+                ))
+                .ToListAsync();
+        }
         private int? GetUserId() => Context.User?.GetUserId();
 
         public override async Task OnConnectedAsync() {
@@ -41,8 +60,8 @@ namespace KanbanBackend.Controllers
 
             await Groups.AddToGroupAsync(Context.ConnectionId, $"board-{dashboardId}");
 
-            // var columns = await _context.Columns.Where(c => c.DashboardId == dashboardId)
-            // await Clients.Caller.SendAsync("BoardState", columns);
+            var state = await LoadBoardState(dashboardId);
+            await Clients.Caller.SendAsync("BoardState", state);
 
             await Clients.Group($"board-{dashboardId}").SendAsync("UserJoined", userId);
         }
@@ -124,6 +143,75 @@ namespace KanbanBackend.Controllers
 
             await Clients.Caller.SendAsync("InviteResolved", new { inviteId, accepted = accept });
             // Enter(invite.BoardId), accept == true?
+        }
+        public async Task BoardState(int dashboardId, List<ColumnDto> columns) {
+            var userId = GetUserId();
+            if (userId is null) {
+                await Clients.Caller.SendAsync("Error", "Unauthorized");
+                return;
+            }
+
+            bool hasAccess = await _context.Dashboards.AnyAsync(d => d.Id == dashboardId && d.UserId == userId)
+                || await _context.BoardMembers.AnyAsync(m => m.BoardId == dashboardId && m.UserId == userId);
+
+            if (!hasAccess) {
+                await Clients.Caller.SendAsync("Error", "No access to this board");
+                return;
+            }
+
+            var existingColumns = await _context.Columns
+                .Include(c => c.Cards)
+                .Where(c => c.DashboardId == dashboardId)
+                .ToListAsync();
+
+            var incomingColumnIds = columns.Where(c => c.Id > 0).Select(c => c.Id).ToHashSet();
+            var columnsToRemove = existingColumns.Where(c => !incomingColumnIds.Contains(c.Id)).ToList();
+            _context.Columns.RemoveRange(columnsToRemove);
+
+            int columnOrder = 0;
+            foreach (var colDto in columns) {
+                Column column;
+                if (colDto.Id > 0) {
+                    var found = existingColumns.FirstOrDefault(c => c.Id == colDto.Id);
+                    if (found is null) { columnOrder++; continue; } 
+                    column = found;
+                    column.Name = colDto.Name;
+                    column.Order = columnOrder;
+                }
+                else {
+                    column = new Column { Name = colDto.Name, Order = columnOrder, DashboardId = dashboardId };
+                    _context.Columns.Add(column);
+                }
+
+                var incomingCardIds = colDto.Cards.Where(c => c.Id > 0).Select(c => c.Id).ToHashSet();
+                var existingCards = column.Cards.ToList();
+                var cardsToRemove = existingCards.Where(c => !incomingCardIds.Contains(c.Id)).ToList();
+                _context.Cards.RemoveRange(cardsToRemove);
+
+                int cardOrder = 0;
+                foreach (var cardDto in colDto.Cards) {
+                    if (cardDto.Id > 0) {
+                        var found = existingCards.FirstOrDefault(c => c.Id == cardDto.Id);
+                        if (found is null) { cardOrder++; continue; }
+                        found.Name = cardDto.Name;
+                        found.Order = cardOrder;
+                        found.Done = cardDto.Done;
+                    }
+                    else {
+                        column.Cards.Add(new Card { Name = cardDto.Name, Order = cardOrder, Done = cardDto.Done });
+                    }
+                    cardOrder++;
+                }
+
+                columnOrder++;
+            }
+
+            await _context.SaveChangesAsync();
+            await BroadcastBoardState(dashboardId);
+        }
+        private async Task BroadcastBoardState(int dashboardId) {
+            var state = await LoadBoardState(dashboardId);
+            await Clients.Group($"board-{dashboardId}").SendAsync("BoardState", state);
         }
     }
 }
